@@ -1,18 +1,17 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from "@react-three/postprocessing";
-import { Bvh, Clone, CloneProps, Sky, useGLTF } from "@react-three/drei";
+import { EffectComposer, Noise, ToneMapping, Vignette } from "@react-three/postprocessing";
+import { Sky } from "@react-three/drei";
 import { usePathname } from "next/navigation";
-import { AnimatedModel } from "./AnimatedModel";
 import { Physics } from "@react-three/rapier";
+import { AnimatedPebbleModel } from "./AnimatedPebbleModel";
+import { AnimatedPebble2Model } from "./AnimatedPebble2Model";
 
 export default function ThreeScene() {
-  const { scene: pebble } = useGLTF("/models/pebble.glb");
   const pathname = usePathname();
-  const { scene: pebble2 } = useGLTF("/models/pebble2.glb");
 
   return (
     <div id="canvas-container" className="fixed inset-0 -z-10">
@@ -39,14 +38,14 @@ export default function ThreeScene() {
         />
         <Effects />
 
-        <Physics gravity={[0, -9.81, 0]} debug>
+        <Suspense fallback={null}>
+          <Physics gravity={[0, -9.81, 0]} debug>
           <mesh position={[0.5, -1, -1]} rotation={[4.5, 0, 0]} receiveShadow>
             <circleGeometry args={[4, 32]} />
             <meshStandardMaterial transparent opacity={0.2} color="#FFFFFF" />
           </mesh>
 
-          <AnimatedModel
-            object={pebble}
+          <AnimatedPebbleModel
             position={[0, 0, 0]}
             scale={1.2}
             castShadow
@@ -56,8 +55,7 @@ export default function ThreeScene() {
             reverseDelay={600}
           />
 
-          <AnimatedModel
-            object={pebble2}
+          <AnimatedPebble2Model
             position={[0.5, 1, 0]}
             scale={1}
             rotation={[0, Math.PI / 2.2, 0]}
@@ -68,8 +66,7 @@ export default function ThreeScene() {
             reverseDelay={300}
           />
 
-          <AnimatedModel
-            object={pebble}
+          <AnimatedPebbleModel
             position={[0.5, 2.1, 0]}
             scale={1}
             rotation={[Math.PI, Math.PI * 1.3, 0]}
@@ -79,7 +76,8 @@ export default function ThreeScene() {
             delay={600}
             reverseDelay={0}
           />
-        </Physics>
+          </Physics>
+        </Suspense>
       </Canvas>
     </div>
   );
