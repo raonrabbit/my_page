@@ -88,6 +88,7 @@ function Effects() {
   const look = new THREE.Vector3();
 
   useFrame(({ camera, pointer }, dt) => {
+
     target.set(pointer.x - 1, 5 + pointer.y, 15 + Math.atan(pointer.x * 2));
 
     const k = 3;
