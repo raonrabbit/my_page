@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Clone, useGLTF } from "@react-three/drei";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Clone } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+import { useModelCache } from "../hooks/useModelCache";
 
 interface AnimatedPebble2ModelProps {
   visible: boolean;
@@ -14,82 +17,125 @@ interface AnimatedPebble2ModelProps {
   receiveShadow?: boolean;
 }
 
-export const AnimatedPebble2Model = ({ 
-  visible, 
-  delay, 
-  reverseDelay, 
+export const AnimatedPebble2Model = ({
+  visible,
+  delay,
+  reverseDelay,
   position = [0, 0, 0],
   scale = 1,
   rotation = [0, 0, 0],
   castShadow = false,
-  receiveShadow = false
+  receiveShadow = false,
 }: AnimatedPebble2ModelProps) => {
-  const { scene } = useGLTF("/models/pebble2.glb");
-  const [scaleValue, setScaleValue] = useState(0);
+  const { pebble2 } = useModelCache();
   const [isVisible, setIsVisible] = useState(false);
 
-  const animateIn = useCallback(() => {
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / 400, 1);
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      setScaleValue(easeOut);
+  const baseScaleRef = useRef<number>(scale);
+  const animScaleRef = useRef<number>(0);
 
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    animate();
-  }, []);
+  const meshRef = useRef<THREE.Group>(null);
 
-  const animateOut = useCallback(() => {
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / 300, 1);
-      const easeIn = Math.pow(progress, 3);
-      setScaleValue(1 - easeIn);
+  const animRef = useRef<{
+    isAnimating: boolean;
+    direction: "in" | "out" | null;
+    startTime: number;
+    timeoutId: number | null;
+  }>({
+    isAnimating: false,
+    direction: null,
+    startTime: 0,
+    timeoutId: null,
+  });
 
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
+  useEffect(() => {
+    baseScaleRef.current = scale;
+    if (meshRef.current) {
+      meshRef.current.scale.setScalar(baseScaleRef.current * animScaleRef.current);
+    }
+  }, [scale]);
+
+  useFrame(() => {
+    const a = animRef.current;
+    if (!a.isAnimating || !meshRef.current) return;
+
+    const elapsed = performance.now() - a.startTime;
+    const duration = a.direction === "in" ? 400 : 300;
+    const t = Math.min(elapsed / duration, 1);
+
+    let animValue: number;
+    if (a.direction === "in") {
+      animValue = t * t * (3 - 2 * t);
+    } else {
+      animValue = 1 - Math.pow(t, 3);
+    }
+
+    animScaleRef.current = animValue;
+    const finalScale = baseScaleRef.current * animScaleRef.current;
+    meshRef.current.scale.setScalar(finalScale);
+
+    if (t >= 1) {
+      a.isAnimating = false;
+      if (a.direction === "out") {
         setIsVisible(false);
-        setScaleValue(0);
+        animScaleRef.current = 0;
+        meshRef.current.scale.setScalar(0);
       }
-    };
-    animate();
+    }
+  });
+
+  const startAnimation = useCallback((direction: "in" | "out", wait: number) => {
+    const a = animRef.current;
+
+    if (a.timeoutId) {
+      clearTimeout(a.timeoutId);
+      a.timeoutId = null;
+    }
+
+    if (direction === "in") {
+      setIsVisible(true);
+      animScaleRef.current = 0;
+      if (meshRef.current) meshRef.current.scale.setScalar(0);
+    }
+
+    const id = window.setTimeout(() => {
+      a.isAnimating = true;
+      a.direction = direction;
+      a.startTime = performance.now();
+    }, Math.max(0, wait));
+
+    a.timeoutId = id;
   }, []);
 
   useEffect(() => {
     if (visible) {
-      const timer = setTimeout(() => {
-        setIsVisible(true);
-        animateIn();
-      }, delay);
-
-      return () => clearTimeout(timer);
+      startAnimation("in", delay);
     } else {
       if (isVisible) {
-        const timer = setTimeout(() => {
-          animateOut();
-        }, reverseDelay);
-
-        return () => clearTimeout(timer);
+        startAnimation("out", reverseDelay);
       } else {
         setIsVisible(false);
-        setScaleValue(0);
+        animScaleRef.current = 0;
+        if (meshRef.current) meshRef.current.scale.setScalar(0);
+        animRef.current.isAnimating = false;
+        animRef.current.direction = null;
       }
     }
-  }, [visible]);
+  }, [visible, delay, reverseDelay]);
+
+  useEffect(() => {
+    return () => {
+      const a = animRef.current;
+      if (a.timeoutId) clearTimeout(a.timeoutId);
+    };
+  }, []);
 
   if (!isVisible && !visible) return null;
 
   return (
     <Clone
-      object={scene}
+      ref={meshRef}
+      object={pebble2}
       position={position}
-      scale={[scale * scaleValue, scale * scaleValue, scale * scaleValue]}
       rotation={rotation}
       castShadow={castShadow}
       receiveShadow={receiveShadow}
