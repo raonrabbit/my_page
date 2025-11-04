@@ -1,17 +1,25 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { EffectComposer, Noise, ToneMapping, Vignette } from "@react-three/postprocessing";
-import { Sky } from "@react-three/drei";
+import { Html, Sky } from "@react-three/drei";
 import { usePathname } from "next/navigation";
-import { Physics } from "@react-three/rapier";
 import { AnimatedPebbleModel } from "./AnimatedPebbleModel";
 import { AnimatedPebble2Model } from "./AnimatedPebble2Model";
 
 export default function ThreeScene() {
   const pathname = usePathname();
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div id="canvas-container" className="fixed inset-0 -z-10">
@@ -22,9 +30,9 @@ export default function ThreeScene() {
         style={{
           filter: "blur(1.5px)",
         }}
+        className={`transition-opacity duration-1000 ${isLoaded ? "opacity-100" : "opacity-0"}`}
       >
         <ambientLight intensity={1} />
-        <Sky />
         <spotLight
           position={[-3, 8, 5]}
           angle={0.5}
@@ -37,47 +45,41 @@ export default function ThreeScene() {
           shadow-bias={-0.0001}
         />
         <Effects />
+        <Sky />
 
-        <Suspense fallback={null}>
-          <Physics gravity={[0, -9.81, 0]} debug>
-          <mesh position={[0.5, -1, -1]} rotation={[4.5, 0, 0]} receiveShadow>
-            <circleGeometry args={[4, 32]} />
-            <meshStandardMaterial transparent opacity={0.2} color="#FFFFFF" />
-          </mesh>
-
-          <AnimatedPebbleModel
-            position={[0, 0, 0]}
-            scale={1.2}
-            castShadow
-            receiveShadow
-            visible={pathname === "/about/" || pathname === "/stacks/" || pathname === "/projects/"}
-            delay={0}
-            reverseDelay={600}
-          />
-
-          <AnimatedPebble2Model
-            position={[0.5, 1, 0]}
-            scale={1}
-            rotation={[0, Math.PI / 2.2, 0]}
-            castShadow
-            receiveShadow
-            visible={pathname === "/stacks/" || pathname === "/projects/"}
-            delay={300}
-            reverseDelay={300}
-          />
-
-          <AnimatedPebbleModel
-            position={[0.5, 2.1, 0]}
-            scale={1}
-            rotation={[Math.PI, Math.PI * 1.3, 0]}
-            castShadow
-            receiveShadow
-            visible={pathname === "/projects/"}
-            delay={600}
-            reverseDelay={0}
-          />
-          </Physics>
-        </Suspense>
+        <mesh position={[0.5, -1, -1]} rotation={[4.5, 0, 0]} receiveShadow>
+          <circleGeometry args={[4, 32]} />
+          <meshStandardMaterial transparent opacity={0.2} color="#000000" />
+        </mesh>
+        <AnimatedPebbleModel
+          position={[0, 0, 0]}
+          scale={1.2}
+          castShadow
+          receiveShadow
+          visible={pathname === "/about/" || pathname === "/stacks/" || pathname === "/projects/"}
+          delay={0}
+          reverseDelay={600}
+        />
+        <AnimatedPebble2Model
+          position={[0.5, 1, 0]}
+          scale={1}
+          rotation={[0, Math.PI / 2.2, 0]}
+          castShadow
+          receiveShadow
+          visible={pathname === "/stacks/" || pathname === "/projects/"}
+          delay={300}
+          reverseDelay={300}
+        />
+        <AnimatedPebbleModel
+          position={[0.5, 2.1, 0]}
+          scale={1}
+          rotation={[Math.PI, Math.PI * 1.3, 0]}
+          castShadow
+          receiveShadow
+          visible={pathname === "/projects/"}
+          delay={600}
+          reverseDelay={0}
+        />
       </Canvas>
     </div>
   );
@@ -88,7 +90,6 @@ function Effects() {
   const look = new THREE.Vector3();
 
   useFrame(({ camera, pointer }, dt) => {
-
     target.set(pointer.x - 1, 5 + pointer.y, 15 + Math.atan(pointer.x * 2));
 
     const k = 3;
