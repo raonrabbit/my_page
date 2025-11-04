@@ -3,6 +3,8 @@ import "./globals.css";
 import localFont from "next/font/local";
 import SiteHeader from "@/widgets/site-header/ui/SiteHeader";
 import ThreeScene from "@/widgets/three-scene/ui/ThreeScene";
+import { Suspense } from "react";
+import LoadingScreen from "@/shared/ui/loading-screen/LoadingScreen";
 
 const pretendard = localFont({
   src: "../../public/fonts/pretendard/PretendardVariable.woff2",

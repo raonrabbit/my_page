@@ -1,14 +1,9 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
-import {
-  EffectComposer,
-  Noise,
-  ToneMapping,
-  Vignette,
-} from "@react-three/postprocessing";
+import { EffectComposer, Noise, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { Html, Sky } from "@react-three/drei";
 import { usePathname } from "next/navigation";
 import { AnimatedPebbleModel } from "./AnimatedPebbleModel";
@@ -16,6 +11,15 @@ import { AnimatedPebble2Model } from "./AnimatedPebble2Model";
 
 export default function ThreeScene() {
   const pathname = usePathname();
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div id="canvas-container" className="fixed inset-0 -z-10">
@@ -26,6 +30,7 @@ export default function ThreeScene() {
         style={{
           filter: "blur(1.5px)",
         }}
+        className={`transition-opacity duration-1000 ${isLoaded ? "opacity-100" : "opacity-0"}`}
       >
         <ambientLight intensity={1} />
         <spotLight
@@ -44,23 +49,17 @@ export default function ThreeScene() {
 
         <mesh position={[0.5, -1, -1]} rotation={[4.5, 0, 0]} receiveShadow>
           <circleGeometry args={[4, 32]} />
-          <meshStandardMaterial transparent opacity={0.2} color="#FFFFFF" />
+          <meshStandardMaterial transparent opacity={0.2} color="#000000" />
         </mesh>
-
         <AnimatedPebbleModel
           position={[0, 0, 0]}
           scale={1.2}
           castShadow
           receiveShadow
-          visible={
-            pathname === "/about/" ||
-            pathname === "/stacks/" ||
-            pathname === "/projects/"
-          }
+          visible={pathname === "/about/" || pathname === "/stacks/" || pathname === "/projects/"}
           delay={0}
           reverseDelay={600}
         />
-
         <AnimatedPebble2Model
           position={[0.5, 1, 0]}
           scale={1}
@@ -71,7 +70,6 @@ export default function ThreeScene() {
           delay={300}
           reverseDelay={300}
         />
-
         <AnimatedPebbleModel
           position={[0.5, 2.1, 0]}
           scale={1}
@@ -104,12 +102,7 @@ function Effects() {
   });
 
   return (
-    <EffectComposer
-      stencilBuffer
-      enableNormalPass={false}
-      autoClear={false}
-      multisampling={4}
-    >
+    <EffectComposer stencilBuffer enableNormalPass={false} autoClear={false} multisampling={4}>
       <ToneMapping />
       <Noise premultiply opacity={0.4} />
       <Vignette eskil={false} offset={0.1} darkness={0.6} />
