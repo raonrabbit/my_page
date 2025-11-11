@@ -17,19 +17,23 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           sha: ${{ github.event.workflow_run.head_sha }}
+      
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.19.0
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+      
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      
       - name: Build
         run: pnpm run build
-      # Vercel 배포 (프로덕션으로 자동 승격 안 됨)
+      
       - name: Deploy to Vercel
         id: vercel-deploy
         uses: amondnet/vercel-action@v25
@@ -37,26 +41,47 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          # vercel-args: "--prod" 제거
           working-directory: ./my-page
       
-      # 배포 성공 시 Edge Config 업데이트 (트래픽 50% 분산)
+      - name: Read Current Edge Config
+        run: |
+          curl 'https://edge-config.vercel.com/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/item/blue-green-configuration?token=${{ secrets.EDGE_CONFIG_TOKEN }}' \
+            -o current-config.json
+          cat current-config.json
+      
+      - name: Prepare Blue-Green URLs
+        id: prepare-urls
+        run: |
+          BLUE_DOMAIN=$(cat current-config.json | jq -r '.deploymentDomainBlue')
+          
+          if [ -z "$BLUE_DOMAIN" ] || [ "$BLUE_DOMAIN" = "null" ]; then
+            BLUE_DOMAIN="my-page-9xnklttos-raonrabbit-3960s-projects.vercel.app"
+          fi
+          
+          GREEN_URL="${{ steps.vercel-deploy.outputs.preview-url }}"
+          GREEN_DOMAIN=$(echo $GREEN_URL | sed 's|https://||' | sed 's|http://||' | sed 's|/$||')
+          
+          echo "blue=${BLUE_DOMAIN}" >> $GITHUB_OUTPUT
+          echo "green=${GREEN_DOMAIN}" >> $GITHUB_OUTPUT
+          echo "Blue: $BLUE_DOMAIN"
+          echo "Green: $GREEN_DOMAIN"
+      
       - name: Update Edge Config for Blue-Green
         if: success()
         run: |
           curl -X 'PATCH' 'https://api.vercel.com/v1/edge-config/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/items?teamId=${{ secrets.VERCEL_ORG_ID }}' \
-          -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
-          -H 'Content-Type: application/json' \
-          -d '{
-            "items": [
-              {
-                "operation": "upsert",
-                "key": "blue-green-configuration",
-                "value": {
-                  "deploymentDomainBlue": "${{ secrets.VERCEL_PRODUCTION_DOMAIN }}",
-                  "deploymentDomainGreen": "${{ steps.vercel-deploy.outputs.preview-url }}",
-                  "trafficGreenPercent": 50
+            -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"items\": [
+                {
+                  \"operation\": \"upsert\",
+                  \"key\": \"blue-green-configuration\",
+                  \"value\": {
+                    \"deploymentDomainBlue\": \"${{ steps.prepare-urls.outputs.blue }}\",
+                    \"deploymentDomainGreen\": \"${{ steps.prepare-urls.outputs.green }}\",
+                    \"trafficGreenPercent\": 50
+                  }
                 }
-              }
-            ]
-          }'
+              ]
+            }"
