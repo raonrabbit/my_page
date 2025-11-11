@@ -105,7 +105,7 @@ export async function middleware(req: NextRequest) {
   return response;
 }
 
-function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig) {
+function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig): string {
   const random = Math.random() * 100;
 
   const selected =
@@ -115,10 +115,12 @@ function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig) {
 
   if (!selected) {
     console.error("Blue green configuration error", blueGreenConfig);
+    // 기본값으로 현재 도메인 반환
+    return process.env.VERCEL_URL || "";
   }
 
-  if (/^http/.test(selected || "")) {
-    return new URL(selected || "").hostname;
+  if (/^http/.test(selected)) {
+    return new URL(selected).hostname;
   }
 
   return selected;
