@@ -3,7 +3,6 @@ name: Promote to Production
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  VERCEL_PROD_URL: ${{ secrets.VERCEL_PRODUCTION_DOMAIN }}
 
 on:
   workflow_dispatch
@@ -12,6 +11,9 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+        
       - name: Install Vercel CLI
         run: npm install --global vercel
         
@@ -19,16 +21,18 @@ jobs:
         run: |
           curl 'https://edge-config.vercel.com/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/item/blue-green-configuration?token=${{ secrets.EDGE_CONFIG_TOKEN }}' \
                 -o config.json
+          
+          echo "Current config:"
           cat config.json
                 
       - name: Extract Green Deployment Domain
         id: green-url
         run: |
           GREEN_URL=$(cat config.json | jq -r '.deploymentDomainGreen')
-          # URL에서 도메인만 추출 (https://, http://, trailing slash 제거)
           GREEN_DOMAIN=$(echo $GREEN_URL | sed 's|https://||' | sed 's|http://||' | sed 's|/$||')
+          
           echo "url=${GREEN_DOMAIN}" >> $GITHUB_OUTPUT
-          echo "Promoting deployment: ${GREEN_DOMAIN}"
+          echo "Promoting: ${GREEN_DOMAIN}"
 
       - name: Promote Green to Production
         run: |
@@ -36,22 +40,29 @@ jobs:
             --token=${{ secrets.VERCEL_TOKEN }} \
             --scope ${{ secrets.VERCEL_ORG_ID }} \
             --yes
+          
+          echo "✅ Promoted to production"
         
       - name: Reset Edge Config
         run: |
+          # Green이 이제 새로운 Blue (프로덕션)
+          NEW_PROD="${{ steps.green-url.outputs.url }}"
+          
           curl -X 'PATCH' 'https://api.vercel.com/v1/edge-config/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/items?teamId=${{ secrets.VERCEL_ORG_ID }}' \
-          -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
-          -H 'Content-Type: application/json' \
-          -d "{
-            \"items\": [
-              {
-                \"operation\": \"upsert\",
-                \"key\": \"blue-green-configuration\",
-                \"value\": {
-                  \"deploymentDomainBlue\": \"${{ env.VERCEL_PROD_URL }}\",
-                  \"deploymentDomainGreen\": \"${{ env.VERCEL_PROD_URL }}\",
-                  \"trafficGreenPercent\": 0
+            -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"items\": [
+                {
+                  \"operation\": \"upsert\",
+                  \"key\": \"blue-green-configuration\",
+                  \"value\": {
+                    \"deploymentDomainBlue\": \"${NEW_PROD}\",
+                    \"deploymentDomainGreen\": \"${NEW_PROD}\",
+                    \"trafficGreenPercent\": 0
+                  }
                 }
-              }
-            ]
-          }"
+              ]
+            }"
+          
+          echo "✅ Edge Config reset"
