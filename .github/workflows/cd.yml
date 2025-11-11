@@ -1,52 +1,62 @@
 name: CD (Deployment)
-
 on:
-  # CI가 성공한 후에만 배포
   workflow_run:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
-    # CI가 성공했을 때만 배포
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
     defaults:
       run:
         working-directory: ./my-page
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           sha: ${{ github.event.workflow_run.head_sha }}
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.19.0
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Build
         run: pnpm run build
-
-      # Vercel 배포
+      # Vercel 배포 (프로덕션으로 자동 승격 안 됨)
       - name: Deploy to Vercel
+        id: vercel-deploy
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--prod"
+          # vercel-args: "--prod" 제거
           working-directory: ./my-page
+      
+      # 배포 성공 시 Edge Config 업데이트 (트래픽 50% 분산)
+      - name: Update Edge Config for Blue-Green
+        if: success()
+        run: |
+          curl -X 'PATCH' 'https://api.vercel.com/v1/edge-config/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/items?teamId=${{ secrets.VERCEL_ORG_ID }}' \
+          -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
+          -H 'Content-Type: application/json' \
+          -d '{
+            "items": [
+              {
+                "operation": "upsert",
+                "key": "blue-green-configuration",
+                "value": {
+                  "deploymentDomainBlue": "${{ secrets.VERCEL_PRODUCTION_DOMAIN }}",
+                  "deploymentDomainGreen": "${{ steps.vercel-deploy.outputs.preview-url }}",
+                  "trafficGreenPercent": 50
+                }
+              }
+            ]
+          }'
