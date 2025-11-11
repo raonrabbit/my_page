@@ -6,7 +6,7 @@ env:
   VERCEL_PROD_URL: ${{ secrets.VERCEL_PRODUCTION_DOMAIN }}
 
 on:
-  workflow_dispatch:  # 수동 실행
+  workflow_dispatch
 
 jobs:
   promote:
@@ -21,34 +21,37 @@ jobs:
                 -o config.json
           cat config.json
                 
-      - name: Extract Green Deployment URL
+      - name: Extract Green Deployment Domain
         id: green-url
         run: |
           GREEN_URL=$(cat config.json | jq -r '.deploymentDomainGreen')
-          echo "url=${GREEN_URL}" >> $GITHUB_OUTPUT
-          echo "Green deployment URL: ${GREEN_URL}"
+          # URL에서 도메인만 추출 (https://, http://, trailing slash 제거)
+          GREEN_DOMAIN=$(echo $GREEN_URL | sed 's|https://||' | sed 's|http://||' | sed 's|/$||')
+          echo "url=${GREEN_DOMAIN}" >> $GITHUB_OUTPUT
+          echo "Promoting deployment: ${GREEN_DOMAIN}"
 
       - name: Promote Green to Production
         run: |
           vercel promote ${{ steps.green-url.outputs.url }} \
             --token=${{ secrets.VERCEL_TOKEN }} \
-            --scope ${{ secrets.VERCEL_ORG_ID }}
+            --scope ${{ secrets.VERCEL_ORG_ID }} \
+            --yes
         
-      - name: Reset Edge Config (Stop Traffic Split)
+      - name: Reset Edge Config
         run: |
           curl -X 'PATCH' 'https://api.vercel.com/v1/edge-config/${{ secrets.VERCEL_EDGE_CONFIG_ID }}/items?teamId=${{ secrets.VERCEL_ORG_ID }}' \
           -H 'Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}' \
           -H 'Content-Type: application/json' \
-          -d '{
-            "items": [
+          -d "{
+            \"items\": [
               {
-                "operation": "upsert",
-                "key": "blue-green-configuration",
-                "value": {
-                  "deploymentDomainBlue": "${{ env.VERCEL_PROD_URL }}",
-                  "deploymentDomainGreen": "${{ env.VERCEL_PROD_URL }}",
-                  "trafficGreenPercent": 0
+                \"operation\": \"upsert\",
+                \"key\": \"blue-green-configuration\",
+                \"value\": {
+                  \"deploymentDomainBlue\": \"${{ env.VERCEL_PROD_URL }}\",
+                  \"deploymentDomainGreen\": \"${{ env.VERCEL_PROD_URL }}\",
+                  \"trafficGreenPercent\": 0
                 }
               }
             ]
-          }'
+          }"
