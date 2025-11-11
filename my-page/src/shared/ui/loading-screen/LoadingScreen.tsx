@@ -13,7 +13,7 @@ export default function LoadingScreen() {
       }}
     >
       <div className="text-center animate-fade-out-down">
-        <h1 className="text-4xl font-bold text-green-400 text-shadow-lg mb-4 p-4">
+        <h1 className="text-4xl font-bold text-blue-400 text-shadow-lg mb-4 p-4">
           Welcome...
         </h1>
       </div>
