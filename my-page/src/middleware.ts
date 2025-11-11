@@ -2,7 +2,7 @@ import { get } from "@vercel/edge-config";
 import { NextRequest, NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next|favicon.ico).*)"],
 };
 
 interface BlueGreenConfig {
@@ -20,6 +20,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // RSC 요청 제외
+  const url = new URL(req.url);
+  if (url.searchParams.has("_rsc")) {
+    return NextResponse.next();
+  }
+
+  // Prefetch 요청 제외
+  if (req.headers.get("purpose") === "prefetch") {
+    return NextResponse.next();
+  }
+
+  // HTML 문서 요청만 처리
   if (req.headers.get("sec-fetch-dest") !== "document") {
     return NextResponse.next();
   }
@@ -29,7 +41,6 @@ export async function middleware(req: NextRequest) {
   }
 
   if (!process.env.EDGE_CONFIG) {
-    console.warn("EDGE_CONFIG env variable not set. Skipping blue-green.");
     return NextResponse.next();
   }
 
@@ -38,19 +49,15 @@ export async function middleware(req: NextRequest) {
   );
 
   if (!blueGreenConfig) {
-    console.warn("No blue-green configuration found");
     return NextResponse.next();
   }
 
-  // 🔥 쿠키로 세션 고정 (Skew Protection)
   const deploymentCookie = req.cookies.get("__bg_deployment");
   let selectedDomain: string;
 
   if (deploymentCookie?.value) {
-    // 이미 배포가 할당된 사용자 - 같은 배포 유지
     selectedDomain = deploymentCookie.value;
   } else {
-    // 새 사용자 - 랜덤 선택
     selectedDomain = selectBlueGreenDeploymentDomain(blueGreenConfig);
   }
 
@@ -67,7 +74,6 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  // 다른 배포로 프록시
   const headers = new Headers(req.headers);
   headers.set("x-deployment-override", selectedDomain);
   headers.set(
@@ -75,10 +81,10 @@ export async function middleware(req: NextRequest) {
     process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "unknown"
   );
 
-  const url = new URL(req.url);
-  url.hostname = selectedDomain;
+  const proxyUrl = new URL(req.url);
+  proxyUrl.hostname = selectedDomain;
 
-  const proxyResponse = await fetch(url, {
+  const proxyResponse = await fetch(proxyUrl, {
     headers,
     redirect: "manual",
   });
@@ -99,7 +105,7 @@ export async function middleware(req: NextRequest) {
   return response;
 }
 
-function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig): string {
+function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig) {
   const random = Math.random() * 100;
 
   const selected =
@@ -109,12 +115,10 @@ function selectBlueGreenDeploymentDomain(blueGreenConfig: BlueGreenConfig): stri
 
   if (!selected) {
     console.error("Blue green configuration error", blueGreenConfig);
-    // 기본값으로 현재 도메인 반환
-    return process.env.VERCEL_URL || "";
   }
 
-  if (/^http/.test(selected)) {
-    return new URL(selected).hostname;
+  if (/^http/.test(selected || "")) {
+    return new URL(selected || "").hostname;
   }
 
   return selected;
